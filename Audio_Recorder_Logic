@@ -1,0 +1,100 @@
+-- Paste below code in Execute when page loads
+
+var mediaRecorder, audioChunks = [], isRecording = false;
+var audioContext, sourceNode, keepAliveNode;
+var recTimerInterval, elapsedSeconds = 0;
+
+function showPanel(name) {
+  document.getElementById('idlePanel').style.display      = name === 'idle'      ? 'flex' : 'none';
+  document.getElementById('recordingPanel').style.display = name === 'recording' ? 'flex' : 'none';
+  document.getElementById('donePanel').style.display      = name === 'done'      ? 'flex' : 'none';
+}
+
+function fmtTime(s) {
+  var m = Math.floor(s / 60), ss = s % 60;
+  return m + ':' + (ss < 10 ? '0' : '') + ss;
+}
+
+document.getElementById('startBtn').addEventListener('click', function () {
+  if (isRecording) return;
+  audioChunks = [];
+  apex.item('P5_AUDIO_DATA').setValue('');
+  apex.item('P5_FILENAME').setValue('');
+
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    audioContext  = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode    = audioContext.createMediaStreamSource(stream);
+    keepAliveNode = audioContext.createScriptProcessor(4096, 1, 1);
+    keepAliveNode.onaudioprocess = function (e) {
+      var i = e.inputBuffer.getChannelData(0);
+      var o = e.outputBuffer.getChannelData(0);
+      for (var x = 0; x < i.length; x++) o[x] = i[x];
+    };
+    sourceNode.connect(keepAliveNode);
+    keepAliveNode.connect(audioContext.destination);
+
+    var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                 : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                 : MediaRecorder.isTypeSupported('audio/mp4')  ? 'audio/mp4' : '';
+
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType: mimeType } : {});
+    mediaRecorder.start(1000);
+    isRecording = true;
+
+    elapsedSeconds = 0;
+    showPanel('recording');
+    recTimerInterval = setInterval(function () {
+      elapsedSeconds++;
+      document.getElementById('recTimer').innerText = fmtTime(elapsedSeconds);
+    }, 1000);
+
+    mediaRecorder.addEventListener('dataavailable', function (e) {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    });
+
+    mediaRecorder.addEventListener('stop', function () {
+      clearInterval(recTimerInterval);
+      if (keepAliveNode) keepAliveNode.disconnect();
+      if (sourceNode)    sourceNode.disconnect();
+      if (audioContext)  audioContext.close();
+      stream.getTracks().forEach(function (t) { t.stop(); });
+
+      if (audioChunks.length === 0) {
+        document.getElementById('idleMsg').innerText = 'No audio captured. Try again.';
+        showPanel('idle'); isRecording = false; return;
+      }
+
+      var finalMime = mimeType || 'audio/webm';
+      var audioBlob = new Blob(audioChunks, { type: finalMime });
+      document.getElementById('audioPlayback').src = URL.createObjectURL(audioBlob);
+
+      var reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = function () {
+        apex.item('P5_AUDIO_DATA').setValue(reader.result.split(',')[1]);
+        var ext = finalMime.indexOf('mp4') > -1 ? 'm4a' : 'webm';
+        apex.item('P5_FILENAME').setValue('rec_' + Date.now() + '.' + ext);
+        document.getElementById('doneMsg').innerText = 'Recorded ' + fmtTime(elapsedSeconds) + ' — click Save to store';
+      };
+      showPanel('done');
+      isRecording = false;
+    });
+
+  }).catch(function (err) {
+    document.getElementById('idleMsg').innerText = ' Mic error: ' + err.message;
+  });
+});
+
+document.getElementById('stopBtn').addEventListener('click', function () {
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+});
+
+document.getElementById('reRecordBtn').addEventListener('click', function () {
+  document.getElementById('idleMsg').innerText = 'Click start to begin recording';
+  showPanel('idle');
+});
+
+document.getElementById('SAVE_AUDIO').addEventListener('click', function () {
+  if (isRecording) { alert('Please stop recording first.'); return; }
+  apex.submit('SAVE_AUDIO');
+});
