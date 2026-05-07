@@ -1,0 +1,28 @@
+--Create Process in Processing point
+--Paste below code 
+--In server side condition, Type : Request=Value and Value : SAVE_VIDEO
+
+DECLARE
+  l_blob      BLOB;
+  l_raw       RAW(32767);
+  l_b64       CLOB := :P5_AUDIO_DATA;
+  l_offset    INTEGER := 1;
+  l_amount    INTEGER := 7800; -- safe chunk size (multiple of 4)
+  l_buffer    VARCHAR2(8000);
+BEGIN
+  DBMS_LOB.CREATETEMPORARY(l_blob, TRUE);
+
+  -- Decode Base64 in chunks
+  WHILE l_offset <= DBMS_LOB.GETLENGTH(l_b64) LOOP
+    DBMS_LOB.READ(l_b64, l_amount, l_offset, l_buffer);
+    l_raw := UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(l_buffer));
+    DBMS_LOB.WRITEAPPEND(l_blob, UTL_RAW.LENGTH(l_raw), l_raw);
+    l_offset := l_offset + l_amount;
+  END LOOP;
+
+  INSERT INTO audio_recordings (filename, mime_type, audio_blob)
+  VALUES (:P5_FILENAME, 'audio/webm', l_blob);
+
+  COMMIT;
+  DBMS_LOB.FREETEMPORARY(l_blob);
+END;
