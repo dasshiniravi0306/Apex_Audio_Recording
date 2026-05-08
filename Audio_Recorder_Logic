@@ -48,7 +48,7 @@ document.getElementById('startBtn').addEventListener('click', function () {
       stream.getTracks().forEach(function (t) { t.stop(); });
 
       if (audioChunks.length === 0) {
-        document.getElementById('idleMsg').innerText = '⚠️ No audio captured. Try again.';
+        document.getElementById('idleMsg').innerText = 'No audio captured. Try again.';
         showPanel('idle'); isRecording = false; return;
       }
 
@@ -69,7 +69,7 @@ document.getElementById('startBtn').addEventListener('click', function () {
     });
 
   }).catch(function (err) {
-    document.getElementById('idleMsg').innerText = '❌ Mic error: ' + err.message;
+    document.getElementById('idleMsg').innerText = ' Mic error: ' + err.message;
   });
 });
 
