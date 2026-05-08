@@ -1,7 +1,6 @@
 -- Paste below code in Execute when page loads
 
 var mediaRecorder, audioChunks = [], isRecording = false;
-var audioContext, sourceNode, keepAliveNode;
 var recTimerInterval, elapsedSeconds = 0;
 
 function showPanel(name) {
@@ -22,16 +21,6 @@ document.getElementById('startBtn').addEventListener('click', function () {
   apex.item('P5_FILENAME').setValue('');
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-    audioContext  = new (window.AudioContext || window.webkitAudioContext)();
-    sourceNode    = audioContext.createMediaStreamSource(stream);
-    keepAliveNode = audioContext.createScriptProcessor(4096, 1, 1);
-    keepAliveNode.onaudioprocess = function (e) {
-      var i = e.inputBuffer.getChannelData(0);
-      var o = e.outputBuffer.getChannelData(0);
-      for (var x = 0; x < i.length; x++) o[x] = i[x];
-    };
-    sourceNode.connect(keepAliveNode);
-    keepAliveNode.connect(audioContext.destination);
 
     var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
                  : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
@@ -54,13 +43,12 @@ document.getElementById('startBtn').addEventListener('click', function () {
 
     mediaRecorder.addEventListener('stop', function () {
       clearInterval(recTimerInterval);
-      if (keepAliveNode) keepAliveNode.disconnect();
-      if (sourceNode)    sourceNode.disconnect();
-      if (audioContext)  audioContext.close();
+
+      // Stop all mic tracks to release the microphone
       stream.getTracks().forEach(function (t) { t.stop(); });
 
       if (audioChunks.length === 0) {
-        document.getElementById('idleMsg').innerText = 'No audio captured. Try again.';
+        document.getElementById('idleMsg').innerText = '⚠️ No audio captured. Try again.';
         showPanel('idle'); isRecording = false; return;
       }
 
@@ -81,7 +69,7 @@ document.getElementById('startBtn').addEventListener('click', function () {
     });
 
   }).catch(function (err) {
-    document.getElementById('idleMsg').innerText = ' Mic error: ' + err.message;
+    document.getElementById('idleMsg').innerText = '❌ Mic error: ' + err.message;
   });
 });
 
